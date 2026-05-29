@@ -15,4 +15,4 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const CONFIG_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSObBEhyEg8H-jARJTCnfukch6QMho9NZdV4SbNhunqkWNPcGN4Yl9sUWw-hegRQkjAs5bCVW8i43Hc/pubhtml'
+export const CONFIG_SHEET_URL = 'https://docs.google.com/spreadsheets/d/1Tq15pLPbbQHC6ZKZJOfbKgyjDAReAlBQEwHACCzUgGM/edit?gid=0#gid=0'
