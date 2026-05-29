@@ -1,20 +1,19 @@
 import { useState, useCallback, useRef } from 'react'
 import { fetchSheetData } from '../utils/parseSheetData'
-import { MOCK_SHEET_DATA } from '../data/mockData'
 
 const CACHE_TTL_MS = 2 * 60 * 1000 // 2 minutes
 
 export function useGoogleSheets() {
-  const [sheetData,   setSheetData]   = useState({})
-  const [loadingIds,  setLoadingIds]  = useState(new Set())
-  const [errorIds,    setErrorIds]    = useState({})
+  const [sheetData,  setSheetData]  = useState({})
+  const [loadingIds, setLoadingIds] = useState(new Set())
+  const [errorIds,   setErrorIds]   = useState({})
   const cacheRef = useRef({})
 
   const loadEmployee = useCallback(async (employee, forceFresh = false) => {
     const { id, sheetUrl } = employee
 
-    if (!sheetUrl || sheetUrl.trim() === '') {
-      setSheetData(prev => ({ ...prev, [id]: MOCK_SHEET_DATA[id] || [] }))
+    if (!sheetUrl?.trim()) {
+      setSheetData(prev => ({ ...prev, [id]: [] }))
       return
     }
 
@@ -34,9 +33,7 @@ export function useGoogleSheets() {
     } catch (err) {
       console.error(`Failed to fetch sheet for ${employee.name}:`, err)
       setErrorIds(prev => ({ ...prev, [id]: err.message }))
-      if (MOCK_SHEET_DATA[id]) {
-        setSheetData(prev => ({ ...prev, [id]: MOCK_SHEET_DATA[id] }))
-      }
+      setSheetData(prev => ({ ...prev, [id]: [] }))
     } finally {
       setLoadingIds(prev => { const n = new Set(prev); n.delete(id); return n })
     }
@@ -46,10 +43,9 @@ export function useGoogleSheets() {
     await Promise.all(employees.map(e => loadEmployee(e, forceFresh)))
   }, [loadEmployee])
 
-  const clearEmployee = useCallback(id => {
-    delete cacheRef.current[id]
-    setSheetData(prev => { const n = { ...prev }; delete n[id]; return n })
+  const clearCache = useCallback(() => {
+    cacheRef.current = {}
   }, [])
 
-  return { sheetData, loadingIds, errorIds, loadEmployee, loadAll, clearEmployee }
+  return { sheetData, loadingIds, errorIds, loadEmployee, loadAll, clearCache }
 }

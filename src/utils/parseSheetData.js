@@ -1,4 +1,5 @@
 import Papa from 'papaparse'
+import { buildCsvUrl, fetchCsv } from './fetchCsv'
 
 /*
   Supported Google Sheet layout — row-based (one block of 7 rows per week):
@@ -12,10 +13,7 @@ import Papa from 'papaparse'
   Row │ Manager Comment   │ manager text
   ──────────────────────────────────────────────────────────────────────────
 
-  Score encoding: if task completion is 70% → enter -30; 80% → -20; 60% → -40
-  Dashboard converts to positive percentage: 100 + (-30) = 70%
-
-  Also supports the old column-based layout (one column per week).
+  Score encoding: -30 = 70%, -20 = 80%, -40 = 60%  (100 + score = completion %)
 */
 
 const FIELD_ALIASES = {
@@ -35,57 +33,27 @@ function matchField(label) {
   return null
 }
 
-function extractSheetId(url) {
-  const m = url.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
-  return m ? m[1] : null
-}
-
-function buildCsvUrl(sheetUrl) {
-  if (sheetUrl.includes('pub?') || sheetUrl.includes('output=csv')) return sheetUrl
-  const id = extractSheetId(sheetUrl)
-  if (!id) throw new Error('Cannot extract sheet ID from URL: ' + sheetUrl)
-  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv`
-}
-
-async function fetchCsv(url) {
-  try {
-    const res = await fetch(url, { cache: 'no-store' })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    return await res.text()
-  } catch {
-    const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
-    const res = await fetch(proxy)
-    if (!res.ok) throw new Error('Proxy fetch failed')
-    const json = await res.json()
-    return json.contents
-  }
-}
-
-// Convert raw score value to completion percentage (0–100)
-// Excel format: -30 = 70% completion, -20 = 80%, -40 = 60%
+// Convert raw score → completion % (0–100)
+// -30 → 70%,  -20 → 80%,  positive ≤10 treated as /10 score
 function toCompletionPct(rawVal) {
   if (rawVal === null || rawVal === undefined || rawVal === '') return null
-  // Skip template placeholder text
   const str = String(rawVal).trim()
   if (str.startsWith('//')) return null
   const num = typeof rawVal === 'number' ? rawVal : parseFloat(str)
   if (isNaN(num)) return null
-  // Negative values are the penalty encoding
-  if (num < 0) return Math.max(0, Math.min(100, 100 + num))
-  // Positive values: if already in 0–100 range treat as percentage, else as /10 score
+  if (num < 0)   return Math.max(0, Math.min(100, 100 + num))
   if (num <= 10) return Math.round(num * 10)
   return Math.min(100, num)
 }
 
 function parseColumnBased(rows) {
   if (rows.length < 2) return null
-  const headerRow = rows[0]
-  // New row-based format has "Week Starts from" in first cell — bail out
-  if (/^week/i.test((headerRow[0] || '').trim())) return null
+  // Row-based format starts with "Week Starts from" — bail out
+  if (/^week/i.test((rows[0][0] || '').trim())) return null
 
   const weekCols = []
-  for (let c = 1; c < headerRow.length; c++) {
-    const label = (headerRow[c] || '').trim()
+  for (let c = 1; c < rows[0].length; c++) {
+    const label = (rows[0][c] || '').trim()
     if (label) weekCols.push({ col: c, label })
   }
   if (!weekCols.length) return null
@@ -95,7 +63,6 @@ function parseColumnBased(rows) {
     const key = matchField(rows[r][0])
     if (key && !fieldRows[key]) fieldRows[key] = r
   }
-
   if (!fieldRows.managerScore && !fieldRows.managerComment) return null
 
   const getVal = (rowIdx, col) =>
@@ -115,9 +82,9 @@ function parseColumnBased(rows) {
 
 function parseRowBased(rows) {
   const oldDatePattern = /\d+\s+\w+\s*[-–]\s*\d+\s+\w+|\w+\s+\d+\s*[-–]\s*\w+\s+\d+/i
-  const newWeekPattern = /^week/i  // "Week Starts from"
-  const weeks = []
-  let current = null
+  const newWeekPattern = /^week/i
+  const weeks  = []
+  let current  = null
 
   for (const row of rows) {
     const cell0 = (row[0] || '').trim()
@@ -128,11 +95,11 @@ function parseRowBased(rows) {
 
     if (isNewFormat || isOldFormat) {
       if (current) weeks.push(current)
-      const weekRange = isNewFormat ? cell2 : cell0
       current = {
-        weekRange, startDate: null,
-        oneThing: '', additionalGoal: '', learnings: '',
-        selfComments: '', managerScore: null, managerComment: '',
+        weekRange:      isNewFormat ? cell2 : cell0,
+        startDate:      null,
+        oneThing:       '', additionalGoal: '', learnings: '',
+        selfComments:   '', managerScore: null, managerComment: '',
       }
       continue
     }
@@ -151,7 +118,6 @@ function parseRowBased(rows) {
   }
   if (current) weeks.push(current)
 
-  // Keep all weeks that have a valid date range — empty weeks display as blank, that's fine
   return weeks.filter(w => w.weekRange && w.weekRange.trim())
 }
 
@@ -159,15 +125,10 @@ export async function fetchSheetData(sheetUrl) {
   const csvUrl = buildCsvUrl(sheetUrl)
   const raw    = await fetchCsv(csvUrl)
 
-  // If we got an HTML page instead of CSV, the sheet is not shared/published correctly
-  if (raw.trimStart().startsWith('<')) {
-    throw new Error('Sheet is not accessible. Make sure it is published or shared as "Anyone with link can view".')
-  }
+  console.log('[NP Dashboard] Raw sheet rows (first 10):', Papa.parse(raw, { skipEmptyLines: false }).data.slice(0, 10))
 
   const result = Papa.parse(raw, { skipEmptyLines: false })
   const rows   = result.data
-
-  console.log('[NP Dashboard] Raw sheet rows (first 10):', rows.slice(0, 10))
 
   const columnParsed = parseColumnBased(rows)
   if (columnParsed && columnParsed.length > 0) return columnParsed
@@ -175,5 +136,5 @@ export async function fetchSheetData(sheetUrl) {
   const rowParsed = parseRowBased(rows)
   if (rowParsed && rowParsed.length > 0) return rowParsed
 
-  throw new Error('Could not read sheet. Make sure the sheet follows the 30-60-90 tracker format — "Week Starts from" in column A, date range in column C, one block of 7 rows per week.')
+  throw new Error('Could not read sheet. Make sure it follows the 30-60-90 tracker format — "Week Starts from" in column A, date range in column C, one block of 7 rows per week.')
 }

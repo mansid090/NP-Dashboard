@@ -1,44 +1,30 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Users, BarChart3, ChevronDown, Info, AlertCircle, RefreshCw, Layers } from 'lucide-react'
+import { Users, BarChart3, ChevronDown, Info, AlertCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react'
 
-import Header            from './components/Header'
-import EmployeeCard      from './components/EmployeeCard'
-import ProbationBadge    from './components/ProbationBadge'
-import MonthlyScore      from './components/MonthlyScore'
-import WeeklyRemarks     from './components/WeeklyRemarks'
-import ReportDownload    from './components/ReportDownload'
-import SheetLinkManager  from './components/SheetLinkManager'
-import { LoadingOverlay, SkeletonCard } from './components/LoadingOverlay'
+import Header       from './components/Header'
+import EmployeeCard from './components/EmployeeCard'
+import ProbationBadge from './components/ProbationBadge'
+import MonthlyScore from './components/MonthlyScore'
+import WeeklyRemarks from './components/WeeklyRemarks'
+import ReportDownload from './components/ReportDownload'
+import { SkeletonCard } from './components/LoadingOverlay'
 
-import { useGoogleSheets }  from './hooks/useGoogleSheets'
-import { groupByMonth, averageScore }   from './utils/dateUtils'
+import { useConfig }       from './hooks/useConfig'
+import { useGoogleSheets } from './hooks/useGoogleSheets'
+import { groupByMonth, averageScore } from './utils/dateUtils'
 
-// ── LocalStorage helpers ──────────────────────────────────────────────────────
-const LS_EMP = 'np_employees_v2'
-const LS_MGR = 'np_managers_v2'
-
-function loadFromLS(key, fallback) {
-  try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback }
-  catch { return fallback }
-}
-function saveToLS(key, val) {
-  try { localStorage.setItem(key, JSON.stringify(val)) } catch {}
-}
-
-// ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [employees,     setEmployees]   = useState(() => loadFromLS(LS_EMP, []))
-  const [managers,      setManagers]    = useState(() => loadFromLS(LS_MGR, []))
+  const { employees, managers, loading: configLoading, error: configError, configured } = useConfig()
+
   const [selectedMgrId, setSelectedMgrId] = useState('')
   const [selectedEmpId, setSelectedEmpId] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
   const [selectedWeeks, setSelectedWeeks] = useState([])
-  const [showAdmin,     setShowAdmin]    = useState(false)
-  const [refreshKey,    setRefreshKey]   = useState(0)
+  const [refreshKey,    setRefreshKey]    = useState(0)
 
-  const { sheetData, loadingIds, errorIds, loadEmployee, loadAll } = useGoogleSheets()
+  const { sheetData, loadingIds, errorIds, loadEmployee, loadAll, clearCache } = useGoogleSheets()
 
-  // ── Derived lists ──────────────────────────────────────────────────────────
+  // ── Derived lists ─────────────────────────────────────────────────────────
   const filteredByMgr = useMemo(() =>
     selectedMgrId ? employees.filter(e => e.managerId === selectedMgrId) : employees,
     [employees, selectedMgrId])
@@ -52,7 +38,7 @@ export default function App() {
   const empWeeklyData = useMemo(() =>
     (selectedEmpId ? sheetData[selectedEmpId] : null) ?? [], [sheetData, selectedEmpId])
 
-  // ── Auto-select first employee when filter changes ─────────────────────────
+  // ── Auto-select first employee when filter changes ────────────────────────
   useEffect(() => {
     if (filteredByMgr.length > 0 && !filteredByMgr.find(e => e.id === selectedEmpId)) {
       setSelectedEmpId(filteredByMgr[0].id)
@@ -61,76 +47,64 @@ export default function App() {
     }
   }, [filteredByMgr])
 
-  // ── Load sheet data whenever selected employee changes ─────────────────────
+  // ── Load sheet whenever selected employee changes ─────────────────────────
   useEffect(() => {
     if (selectedEmployee) loadEmployee(selectedEmployee)
   }, [selectedEmployee, refreshKey])
 
-  // ── Auto-refresh: re-fetch when user returns to this tab ──────────────────
+  // ── Auto-refresh on tab focus ─────────────────────────────────────────────
   useEffect(() => {
-    function onVisibilityChange() {
-      if (document.visibilityState === 'visible' && selectedEmployee) {
+    function onVisible() {
+      if (document.visibilityState === 'visible' && selectedEmployee)
         loadEmployee(selectedEmployee, true)
-      }
     }
-    document.addEventListener('visibilitychange', onVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
   }, [selectedEmployee, loadEmployee])
 
-  // ── Auto-refresh: poll every 2 min for the current employee ───────────────
+  // ── Poll every 2 min for current employee ─────────────────────────────────
   useEffect(() => {
     if (!selectedEmployee) return
-    const timer = setInterval(() => {
-      loadEmployee(selectedEmployee, true)
-    }, 2 * 60 * 1000)
-    return () => clearInterval(timer)
+    const t = setInterval(() => loadEmployee(selectedEmployee, true), 2 * 60 * 1000)
+    return () => clearInterval(t)
   }, [selectedEmployee, loadEmployee])
 
-  // ── Auto-select latest month with data ────────────────────────────────────
+  // ── Auto-select latest month ──────────────────────────────────────────────
   useEffect(() => {
     if (!empWeeklyData.length) return
     const months = Object.keys(groupByMonth(empWeeklyData)).sort()
-    if (months.length && !months.includes(selectedMonth)) {
+    if (months.length && !months.includes(selectedMonth))
       setSelectedMonth(months[months.length - 1])
-    }
   }, [empWeeklyData])
 
-  // ── Auto-select all weeks on employee change ───────────────────────────────
+  // ── Auto-select all weeks on employee change ──────────────────────────────
   useEffect(() => {
-    if (empWeeklyData.length) {
+    if (empWeeklyData.length)
       setSelectedWeeks(empWeeklyData.map(w => w.weekRange))
-    }
   }, [selectedEmpId, empWeeklyData.length])
 
-  // ── Persist changes ───────────────────────────────────────────────────────
-  useEffect(() => { saveToLS(LS_EMP, employees) }, [employees])
-  useEffect(() => { saveToLS(LS_MGR, managers)  }, [managers])
-
-  // ── Initial load — all employees ──────────────────────────────────────────
+  // ── Initial load of all sheets once config is ready ──────────────────────
   useEffect(() => {
-    loadAll(employees)
-  }, [refreshKey])
-
-  // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleSaveEmployees = useCallback(emps => {
-    setEmployees(emps)
-    setRefreshKey(k => k + 1)
-  }, [])
-
-  const handleSaveManagers = useCallback(mgrs => {
-    setManagers(mgrs)
-  }, [])
+    if (employees.length) loadAll(employees)
+  }, [employees, refreshKey])
 
   const handleRefresh = useCallback(() => {
+    clearCache()
     setRefreshKey(k => k + 1)
-  }, [])
+  }, [clearCache])
 
-  const employeeCount = employees.length
+  // ── Show config not set ───────────────────────────────────────────────────
+  if (!configured) return <SetupScreen />
+
+  // ── Show loading config ───────────────────────────────────────────────────
+  if (configLoading) return <LoadingScreen />
+
+  // ── Show config error ─────────────────────────────────────────────────────
+  if (configError) return <ErrorScreen message={configError} />
 
   return (
     <div className="min-h-screen bg-np-bg font-sans">
       <Header
-        onAdminClick={() => setShowAdmin(true)}
         onRefresh={handleRefresh}
         isRefreshing={loadingIds.size > 0}
       />
@@ -174,8 +148,10 @@ export default function App() {
             </div>
           </div>
 
-          <div className="ml-auto flex items-center gap-2">
-            <Chip icon={<Users size={11}/>} label={`${employeeCount} Employees`} color="blue" />
+          <div className="ml-auto">
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border bg-blue-50 text-blue-700 border-blue-200">
+              <Users size={11}/> {employees.length} Employees
+            </span>
           </div>
         </div>
 
@@ -184,30 +160,14 @@ export default function App() {
           {/* Left: employee list */}
           <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
             <div className="p-4 space-y-2">
-              <div className="flex items-center justify-between mb-1">
-                <p className="section-title">
-                  Employees
-                  <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
-                </p>
-              </div>
+              <p className="section-title mb-3">
+                Employees <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
+              </p>
 
               {filteredByMgr.length === 0 ? (
-                <div className="text-center py-12 px-3">
-                  <Layers size={28} className="text-np-muted mx-auto mb-2" />
-                  <p className="text-sm font-semibold text-np-text mb-1">
-                    {employees.length === 0 ? 'No employees yet' : 'No employees found'}
-                  </p>
-                  <p className="text-xs text-np-muted mb-3">
-                    {employees.length === 0
-                      ? 'Add managers and employees in Settings to get started.'
-                      : 'Try selecting a different manager.'}
-                  </p>
-                  {employees.length === 0 && (
-                    <button onClick={() => setShowAdmin(true)}
-                      className="btn-primary text-xs mx-auto">
-                      <Users size={12}/> Open Settings
-                    </button>
-                  )}
+                <div className="text-center py-12">
+                  <Users size={28} className="text-np-muted mx-auto mb-2" />
+                  <p className="text-sm text-np-muted">No employees found</p>
                 </div>
               ) : (
                 filteredByMgr.map(emp => (
@@ -225,13 +185,13 @@ export default function App() {
             </div>
           </aside>
 
-          {/* Right: employee detail */}
+          {/* Right: detail */}
           <main className="flex-1 overflow-y-auto p-6">
             {!selectedEmployee ? (
-              <EmptyState onAdmin={() => setShowAdmin(true)} hasEmployees={employees.length > 0} />
+              <SelectPrompt />
             ) : (
               <div className="max-w-5xl mx-auto space-y-5 animate-fade-in-up" key={selectedEmpId}>
-                {/* ── Employee header ── */}
+                {/* Employee header */}
                 <div className="card">
                   <div className="flex items-start justify-between flex-wrap gap-4">
                     <div>
@@ -249,8 +209,7 @@ export default function App() {
                       {!selectedEmployee.sheetUrl && (
                         <div className="mt-2 flex items-center gap-1.5 text-xs text-amber-600">
                           <Info size={12}/>
-                          No Google Sheet linked — showing sample data.{' '}
-                          <button onClick={() => setShowAdmin(true)} className="underline">Add sheet URL</button>
+                          No tracker sheet linked — add the sheet URL in the Master Config Sheet.
                         </div>
                       )}
                     </div>
@@ -265,12 +224,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* ── Probation + Monthly score row ── */}
+                {/* Probation + Monthly */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="card">
                     <p className="section-title mb-3">Probation Status</p>
                     <ProbationBadge employee={selectedEmployee} />
-
                     {empWeeklyData.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-np-border">
                         <p className="section-title mb-2">Overall Summary</p>
@@ -279,15 +237,14 @@ export default function App() {
                           <SummaryStat
                             label="Avg Score"
                             value={averageScore(empWeeklyData) !== null
-                              ? `${Math.round(averageScore(empWeeklyData))}%`
-                              : '—'}
+                              ? `${Math.round(averageScore(empWeeklyData))}%` : '—'}
                             color="#1579be"
                           />
                           <SummaryStat
                             label="Best Score"
                             value={(() => {
-                              const scores = empWeeklyData.filter(w => w.managerScore !== null).map(w => w.managerScore)
-                              return scores.length ? `${Math.round(Math.max(...scores))}%` : '—'
+                              const s = empWeeklyData.filter(w => w.managerScore !== null).map(w => w.managerScore)
+                              return s.length ? `${Math.round(Math.max(...s))}%` : '—'
                             })()}
                             color="#16A34A"
                           />
@@ -298,9 +255,7 @@ export default function App() {
 
                   <div>
                     <p className="section-title mb-3">Monthly Performance</p>
-                    {loadingIds.has(selectedEmpId) ? (
-                      <SkeletonCard />
-                    ) : (
+                    {loadingIds.has(selectedEmpId) ? <SkeletonCard /> : (
                       <MonthlyScore
                         weeklyData={empWeeklyData}
                         selectedMonth={selectedMonth}
@@ -310,13 +265,11 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* ── Weekly Remarks ── */}
+                {/* Weekly remarks */}
                 <div>
                   <p className="section-title mb-3">Weekly Performance Remarks</p>
                   {loadingIds.has(selectedEmpId) ? (
-                    <div className="space-y-3">
-                      <SkeletonCard/><SkeletonCard/>
-                    </div>
+                    <div className="space-y-3"><SkeletonCard/><SkeletonCard/></div>
                   ) : (
                     <WeeklyRemarks
                       weeklyData={empWeeklyData}
@@ -326,7 +279,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* ── Report Download ── */}
+                {/* Export */}
                 <div>
                   <p className="section-title mb-3">Export Report</p>
                   <ReportDownload
@@ -345,70 +298,100 @@ export default function App() {
           </main>
         </div>
       </div>
-
-      {showAdmin && (
-        <SheetLinkManager
-          employees={employees}
-          managers={managers}
-          onSaveEmployees={handleSaveEmployees}
-          onSaveManagers={handleSaveManagers}
-          onClose={() => setShowAdmin(false)}
-        />
-      )}
     </div>
   )
 }
 
-// ── Small helpers ─────────────────────────────────────────────────────────────
+// ── Full-page screens ─────────────────────────────────────────────────────────
 
-function Chip({ icon, label, color }) {
-  const colors = {
-    blue:  'bg-blue-50 text-blue-700 border-blue-200',
-    amber: 'bg-amber-50 text-amber-700 border-amber-200',
-    green: 'bg-green-50 text-green-700 border-green-200',
-  }
+function LoadingScreen() {
   return (
-    <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold border ${colors[color]}`}>
-      {icon} {label}
-    </span>
-  )
-}
-
-function SummaryStat({ label, value, color }) {
-  return (
-    <div className="bg-np-bg rounded-lg px-2 py-2.5">
-      <p className="text-lg font-extrabold" style={{ color: color || '#1E293B' }}>{value}</p>
-      <p className="text-[10px] text-np-muted font-medium">{label}</p>
+    <div className="min-h-screen bg-np-bg flex flex-col items-center justify-center gap-4">
+      <Loader2 size={36} className="text-np-blue animate-spin" />
+      <p className="text-sm font-semibold text-np-text">Loading employee data…</p>
+      <p className="text-xs text-np-muted">Fetching from Master Config Sheet</p>
     </div>
   )
 }
 
-function EmptyState({ onAdmin, hasEmployees }) {
-  if (!hasEmployees) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center animate-fade-in px-6">
-        <div className="w-20 h-20 rounded-2xl bg-np-blue-light border border-np-blue/20 flex items-center justify-center mb-5">
-          <BarChart3 size={36} className="text-np-blue" />
-        </div>
-        <h3 className="text-xl font-bold text-np-text mb-2">Welcome to NP Probation Dashboard</h3>
-        <p className="text-sm text-np-muted max-w-sm mb-6">
-          No data yet. Set up your team in Settings to get started.
-        </p>
-
-        {/* Setup steps */}
-        <div className="text-left max-w-sm w-full space-y-3 mb-6">
-          <Step n="1" title="Add Managers" desc="Add each reporting manager with their name and role." />
-          <Step n="2" title="Add Employees" desc="Add each probation employee and assign them to a manager." />
-          <Step n="3" title="Link Google Sheets" desc="Paste each employee's 30-60-90 tracker sheet URL." />
-        </div>
-
-        <button onClick={onAdmin} className="btn-primary text-sm">
-          <Users size={14}/> Open Settings to Get Started
-        </button>
+function ErrorScreen({ message }) {
+  return (
+    <div className="min-h-screen bg-np-bg flex flex-col items-center justify-center gap-4 px-6">
+      <div className="w-16 h-16 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center">
+        <AlertCircle size={30} className="text-red-500" />
       </div>
-    )
-  }
+      <h2 className="text-lg font-bold text-np-text">Could not load config</h2>
+      <p className="text-sm text-red-600 bg-red-50 border border-red-200 rounded-lg px-4 py-3 max-w-md text-center">
+        {message}
+      </p>
+      <p className="text-xs text-np-muted text-center max-w-sm">
+        Check that the Master Config Sheet URL in <code className="bg-np-border px-1 rounded">src/config.js</code> is correct and the sheet is shared/published.
+      </p>
+    </div>
+  )
+}
 
+function SetupScreen() {
+  return (
+    <div className="min-h-screen bg-np-bg flex flex-col items-center justify-center px-6">
+      <div className="max-w-lg w-full">
+        <div className="text-center mb-8">
+          <div className="w-16 h-16 rounded-2xl bg-np-blue-light border border-np-blue/20 flex items-center justify-center mx-auto mb-4">
+            <BarChart3 size={30} className="text-np-blue" />
+          </div>
+          <h1 className="text-2xl font-extrabold text-np-text mb-2">NP Probation Dashboard</h1>
+          <p className="text-sm text-np-muted">One-time setup required — takes 2 minutes</p>
+        </div>
+
+        <div className="card space-y-5">
+          <SetupStep n="1" title="Create the Master Config Sheet">
+            <p>Create a Google Sheet with these column headers in Row 1:</p>
+            <div className="mt-2 bg-np-bg rounded-lg p-3 font-mono text-xs overflow-x-auto text-np-text border border-np-border">
+              Employee Name &nbsp;|&nbsp; Manager Name &nbsp;|&nbsp; Manager Role &nbsp;|&nbsp; Joining Date &nbsp;|&nbsp; Tracker Sheet URL
+            </div>
+            <p className="mt-2">Then add one employee per row from Row 2 onwards.</p>
+          </SetupStep>
+
+          <SetupStep n="2" title="Publish the sheet">
+            <p>In your Google Sheet: <strong>File → Share → Publish to web → CSV → Publish</strong></p>
+            <p className="mt-1">Copy the published URL.</p>
+          </SetupStep>
+
+          <SetupStep n="3" title="Add the URL to config.js">
+            <p>Open <code className="bg-np-border px-1.5 py-0.5 rounded text-xs">src/config.js</code> and paste the URL:</p>
+            <div className="mt-2 bg-np-bg rounded-lg p-3 font-mono text-xs border border-np-border text-np-text overflow-x-auto">
+              export const CONFIG_SHEET_URL = <span className="text-np-blue">'https://docs.google.com/...'</span>
+            </div>
+          </SetupStep>
+
+          <SetupStep n="4" title="Rebuild and open the dashboard">
+            <p>Run <code className="bg-np-border px-1.5 py-0.5 rounded text-xs">npm run dev</code> (or redeploy). The dashboard will load your team automatically.</p>
+          </SetupStep>
+        </div>
+
+        <p className="text-center text-xs text-np-muted mt-6">
+          After setup, no further configuration is needed. Add/remove employees by editing the Master Config Sheet.
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function SetupStep({ n, title, children }) {
+  return (
+    <div className="flex gap-4">
+      <div className="w-7 h-7 rounded-full bg-np-blue text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+        {n}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-np-text mb-1">{title}</p>
+        <div className="text-xs text-np-muted space-y-1 leading-relaxed">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+function SelectPrompt() {
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center animate-fade-in">
       <div className="w-20 h-20 rounded-2xl bg-np-blue-light border border-np-blue/20 flex items-center justify-center mb-5">
@@ -422,16 +405,11 @@ function EmptyState({ onAdmin, hasEmployees }) {
   )
 }
 
-function Step({ n, title, desc }) {
+function SummaryStat({ label, value, color }) {
   return (
-    <div className="flex items-start gap-3">
-      <div className="w-7 h-7 rounded-full bg-np-blue text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
-        {n}
-      </div>
-      <div>
-        <p className="text-sm font-semibold text-np-text">{title}</p>
-        <p className="text-xs text-np-muted">{desc}</p>
-      </div>
+    <div className="bg-np-bg rounded-lg px-2 py-2.5">
+      <p className="text-lg font-extrabold" style={{ color: color || '#1E293B' }}>{value}</p>
+      <p className="text-[10px] text-np-muted font-medium">{label}</p>
     </div>
   )
 }
