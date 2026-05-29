@@ -95,8 +95,19 @@ function parseRowBased(rows) {
 
     if (isNewFormat || isOldFormat) {
       if (current) weeks.push(current)
+      // For new format: try cell2 first, then scan all columns for a date
+      let weekRange = isNewFormat ? cell2 : cell0
+      if (!weekRange) {
+        for (let c = 1; c < row.length; c++) {
+          const candidate = String(row[c] || '').trim()
+          if (candidate && /\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}/.test(candidate)) {
+            weekRange = candidate
+            break
+          }
+        }
+      }
       current = {
-        weekRange:      isNewFormat ? cell2 : cell0,
+        weekRange,
         startDate:      null,
         oneThing:       '', additionalGoal: '', learnings: '',
         selfComments:   '', managerScore: null, managerComment: '',
@@ -108,8 +119,6 @@ function parseRowBased(rows) {
     const key = matchField(cell0)
     if (key) {
       // Scan columns B, C, D… and take the first non-empty value.
-      // Some sheets place values in column C instead of B (e.g. merged cells,
-      // or the score being right-aligned in a wider column).
       let rawVal = ''
       for (let c = 1; c < Math.min(row.length, 5); c++) {
         const v = row[c]
@@ -123,6 +132,19 @@ function parseRowBased(rows) {
       } else {
         const strVal = String(rawVal).trim()
         current[key] = strVal.startsWith('//') ? '' : strVal
+      }
+    }
+
+    // If this week still has no date range, scan every column of this row
+    // for a date-like value (handles sheets where the date is stored in the
+    // Manager Comment row's column C as a dropdown).
+    if (current && !current.weekRange) {
+      for (let c = 1; c < row.length; c++) {
+        const candidate = String(row[c] || '').trim()
+        if (candidate && /\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}/.test(candidate)) {
+          current.weekRange = candidate
+          break
+        }
       }
     }
   }
