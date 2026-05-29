@@ -158,6 +158,83 @@ function parseRowBased(rows) {
   return weeks.filter(w => w.weekRange && w.weekRange.trim())
 }
 
+// Handles sheets where multiple fields are merged/stacked into one cell
+// e.g. col A = "Week Starts from\nOne Thing\nAdditional Goal..."
+//      col B = "5/05/26 - 11/05/26\nwork on abc\nwork on def..."
+function parseStackedCell(rows) {
+  if (!rows.length) return null
+
+  const cellA = String(rows[0][0] || '')
+  const cellB = String(rows[0][1] || '')
+  const cellC = String(rows[0][2] || '').trim()
+
+  // Must contain at least 2 known field names to be this format
+  const knownCount = Object.values(FIELD_ALIASES)
+    .filter(aliases => aliases.some(a => cellA.toLowerCase().includes(a))).length
+  if (knownCount < 2) return null
+
+  // Try to split by newline (\n or \r\n)
+  const splitA = cellA.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+  const splitB = cellB.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
+
+  // Build field map by pairing label rows with value rows
+  const fieldData = {}
+  let weekRange = cellC
+
+  splitA.forEach((label, i) => {
+    const val = (splitB[i] || '').trim()
+    if (/^week/i.test(label)) {
+      // Date might be the value in same position, or in cellC
+      if (!weekRange && /\d/.test(val)) weekRange = val
+      return
+    }
+    const key = matchField(label)
+    if (key) {
+      const clean = val.startsWith('//') ? '' : val
+      fieldData[key] = clean
+    }
+  })
+
+  // Process any remaining rows (Manager Score, Manager Comment etc.)
+  for (let r = 1; r < rows.length; r++) {
+    const key = matchField((rows[r][0] || '').trim())
+    if (!key) continue
+
+    let rawVal = ''
+    for (let c = 1; c < Math.min(rows[r].length, 5); c++) {
+      const v = rows[r][c]
+      if (v !== null && v !== undefined && String(v).trim() !== '') { rawVal = v; break }
+    }
+
+    // Grab date from any column if we don't have one yet
+    if (!weekRange) {
+      for (let c = 1; c < rows[r].length; c++) {
+        const cand = String(rows[r][c] || '').trim()
+        if (cand && /\d{1,2}[\/\.\-]\d{1,2}[\/\.\-]\d{2,4}/.test(cand)) { weekRange = cand; break }
+      }
+    }
+
+    if (key === 'managerScore') fieldData[key] = toCompletionPct(rawVal)
+    else {
+      const s = String(rawVal).trim()
+      fieldData[key] = s.startsWith('//') ? '' : s
+    }
+  }
+
+  if (!weekRange && !fieldData.managerScore) return null
+
+  return [{
+    weekRange:      weekRange || '',
+    startDate:      null,
+    oneThing:       fieldData.oneThing       || '',
+    additionalGoal: fieldData.additionalGoal || '',
+    learnings:      fieldData.learnings      || '',
+    selfComments:   fieldData.selfComments   || '',
+    managerScore:   fieldData.managerScore   !== undefined ? fieldData.managerScore : null,
+    managerComment: fieldData.managerComment || '',
+  }].filter(w => w.weekRange || w.managerScore !== null)
+}
+
 export async function fetchSheetData(sheetUrl) {
   const csvUrl = buildCsvUrl(sheetUrl)
   const raw    = await fetchCsv(csvUrl)
@@ -172,6 +249,9 @@ export async function fetchSheetData(sheetUrl) {
 
   const rowParsed = parseRowBased(rows)
   if (rowParsed && rowParsed.length > 0) return rowParsed
+
+  const stackedParsed = parseStackedCell(rows)
+  if (stackedParsed && stackedParsed.length > 0) return stackedParsed
 
   throw new Error('Could not read sheet. Make sure it follows the 30-60-90 tracker format — "Week Starts from" in column A, date range in column C, one block of 7 rows per week.')
 }
