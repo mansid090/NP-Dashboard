@@ -107,7 +107,17 @@ function parseRowBased(rows) {
 
     const key = matchField(cell0)
     if (key) {
-      const rawVal = (row[1] !== null && row[1] !== undefined) ? row[1] : ''
+      // Scan columns B, C, D… and take the first non-empty value.
+      // Some sheets place values in column C instead of B (e.g. merged cells,
+      // or the score being right-aligned in a wider column).
+      let rawVal = ''
+      for (let c = 1; c < Math.min(row.length, 5); c++) {
+        const v = row[c]
+        if (v !== null && v !== undefined && String(v).trim() !== '') {
+          rawVal = v
+          break
+        }
+      }
       if (key === 'managerScore') {
         current[key] = toCompletionPct(rawVal)
       } else {

@@ -52,11 +52,12 @@ export function parseConfigRows(rows) {
   // Row 0 is the header — start from row 1
   for (let i = 1; i < rows.length; i++) {
     const row = rows[i]
-    const empName  = (row[0] || '').trim()
-    const mgrName  = (row[1] || '').trim()
-    const mgrRole  = (row[2] || '').trim()
-    const joinDate = (row[3] || '').trim()
-    const sheetUrl = (row[4] || '').trim()
+    const empName      = (row[0] || '').trim()
+    const mgrName      = (row[1] || '').trim()
+    const mgrRole      = (row[2] || '').trim()
+    const joinDate     = (row[3] || '').trim()
+    const sheetUrl     = (row[4] || '').trim()
+    const probDaysRaw  = (row[5] || '').toString().trim()
 
     if (!empName) continue   // skip blank rows
 
@@ -76,6 +77,9 @@ export function parseConfigRows(rows) {
     if (seen.has(empId)) continue
     seen.add(empId)
 
+    const probationDays = probDaysRaw && !isNaN(Number(probDaysRaw))
+      ? Number(probDaysRaw) : 90
+
     employees.push({
       id:               empId,
       name:             empName,
@@ -84,6 +88,7 @@ export function parseConfigRows(rows) {
       probationStatus:  'active',
       confirmationDate: null,
       sheetUrl,
+      probationDays,
     })
   }
 

@@ -2,17 +2,16 @@ import React from 'react'
 import { Clock, CheckCircle, AlertTriangle } from 'lucide-react'
 import {
   formatDate, getProbationEndDate, getDaysRemaining,
-  getProbationProgress, isProbationActive
+  getProbationProgress, isProbationActive, DEFAULT_PROBATION_DAYS
 } from '../utils/dateUtils'
 
 export default function ProbationBadge({ employee, compact = false }) {
-  const { joiningDate, probationStatus, confirmationDate, name } = employee
+  const { joiningDate, probationStatus, confirmationDate } = employee
+  const probationDays = employee.probationDays || DEFAULT_PROBATION_DAYS
 
   if (probationStatus === 'confirmed') {
     return compact ? (
-      <span className="badge-confirmed">
-        <CheckCircle size={11} /> Confirmed
-      </span>
+      <span className="badge-confirmed"><CheckCircle size={11} /> Confirmed</span>
     ) : (
       <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-green-50 border border-green-200">
         <CheckCircle size={16} className="text-green-600 shrink-0" />
@@ -28,24 +27,26 @@ export default function ProbationBadge({ employee, compact = false }) {
     )
   }
 
-  const endDate  = getProbationEndDate(joiningDate)
-  const daysLeft = getDaysRemaining(joiningDate)
-  const progress = getProbationProgress(joiningDate)
-  const isActive = isProbationActive(joiningDate)
+  if (!joiningDate) {
+    return compact
+      ? <span className="badge-active"><Clock size={11} /> No date</span>
+      : <p className="text-xs text-np-muted">No joining date set in config sheet.</p>
+  }
+
+  const endDate  = getProbationEndDate(joiningDate, probationDays)
+  const daysLeft = getDaysRemaining(joiningDate, probationDays)
+  const progress = getProbationProgress(joiningDate, probationDays)
+  const isActive = isProbationActive(joiningDate, probationDays)
   const isOverdue = !isActive && probationStatus === 'active'
 
   if (compact) {
-    return isOverdue ? (
-      <span className="badge-overdue"><AlertTriangle size={11} /> Overdue</span>
-    ) : (
-      <span className="badge-active"><Clock size={11} /> {daysLeft}d left</span>
-    )
+    return isOverdue
+      ? <span className="badge-overdue"><AlertTriangle size={11} /> Overdue</span>
+      : <span className="badge-active"><Clock size={11} /> {daysLeft}d left</span>
   }
 
   return (
-    <div className={`rounded-lg border p-3 ${isOverdue
-      ? 'bg-red-50 border-red-200'
-      : 'bg-amber-50 border-amber-200'}`}>
+    <div className={`rounded-lg border p-3 ${isOverdue ? 'bg-red-50 border-red-200' : 'bg-amber-50 border-amber-200'}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           {isOverdue
@@ -59,19 +60,19 @@ export default function ProbationBadge({ employee, compact = false }) {
               Probation ends on:{' '}
               <span className="font-semibold">{formatDate(endDate)}</span>
             </p>
+            <p className={`text-xs mt-0.5 ${isOverdue ? 'text-red-500' : 'text-amber-500'}`}>
+              Duration: <span className="font-semibold">{probationDays} days</span>
+            </p>
           </div>
         </div>
         <div className="text-right shrink-0">
           <p className={`text-lg font-extrabold leading-none ${isOverdue ? 'text-red-700' : 'text-amber-700'}`}>
             {daysLeft}
           </p>
-          <p className={`text-[10px] font-medium ${isOverdue ? 'text-red-500' : 'text-amber-500'}`}>
-            days left
-          </p>
+          <p className={`text-[10px] font-medium ${isOverdue ? 'text-red-500' : 'text-amber-500'}`}>days left</p>
         </div>
       </div>
 
-      {/* Progress bar */}
       <div className="mt-2.5">
         <div className="flex justify-between text-[10px] text-np-muted mb-1">
           <span>Joined: {formatDate(joiningDate)}</span>
