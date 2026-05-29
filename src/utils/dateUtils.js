@@ -27,11 +27,23 @@ export function getProbationProgress(joiningDate) {
   return Math.min(100, Math.round((elapsed / PROBATION_DAYS) * 100))
 }
 
-// Parse a "DD Mon – DD Mon" label and return the start month as 'YYYY-MM'
-// Falls back gracefully if the format is unexpected
+// Parse a week label and return the start month as 'YYYY-MM'
+// Handles both:
+//   New format: "5/05/26 - 11/05/26"  (DD/MM/YY)
+//   Old format: "24 May – 1 Jun"      (text month names)
 export function getMonthFromWeekLabel(weekLabel, year = new Date().getFullYear()) {
   if (!weekLabel) return null
-  // Try to find a month name in the label
+
+  // DD/MM/YY or D/MM/YY (e.g. "5/05/26 - 11/05/26")
+  const numericMatch = weekLabel.match(/^(\d{1,2})\/(\d{2})\/(\d{2,4})/)
+  if (numericMatch) {
+    const month = parseInt(numericMatch[2], 10)
+    let yr = parseInt(numericMatch[3], 10)
+    if (yr < 100) yr += 2000
+    return `${yr}-${String(month).padStart(2, '0')}`
+  }
+
+  // Text month names (e.g. "24 May – 1 Jun")
   const months = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
   const lower = weekLabel.toLowerCase()
   for (let i = 0; i < months.length; i++) {

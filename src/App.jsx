@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Users, UserCheck, BarChart3, ChevronDown, Info, AlertCircle, RefreshCw, Layers } from 'lucide-react'
+import { Users, BarChart3, ChevronDown, Info, AlertCircle, RefreshCw, Layers } from 'lucide-react'
 
 import Header            from './components/Header'
 import EmployeeCard      from './components/EmployeeCard'
@@ -7,7 +7,6 @@ import ProbationBadge    from './components/ProbationBadge'
 import MonthlyScore      from './components/MonthlyScore'
 import WeeklyRemarks     from './components/WeeklyRemarks'
 import ReportDownload    from './components/ReportDownload'
-import ConfirmationModal from './components/ConfirmationModal'
 import SheetLinkManager  from './components/SheetLinkManager'
 import { LoadingOverlay, SkeletonCard } from './components/LoadingOverlay'
 
@@ -29,31 +28,21 @@ function saveToLS(key, val) {
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [employees,      setEmployees]    = useState(() => loadFromLS(LS_EMP, MOCK_EMPLOYEES))
-  const [managers,       setManagers]     = useState(() => loadFromLS(LS_MGR, MOCK_MANAGERS))
-  const [selectedMgrId,  setSelectedMgrId] = useState('')
-  const [selectedEmpId,  setSelectedEmpId] = useState('')
-  const [activeTab,      setActiveTab]    = useState('active') // 'active' | 'confirmed'
-  const [selectedMonth,  setSelectedMonth] = useState('')
-  const [selectedWeeks,  setSelectedWeeks] = useState([])
-  const [showAdmin,      setShowAdmin]     = useState(false)
-  const [confirmTarget,  setConfirmTarget] = useState(null)  // employee to confirm
-  const [refreshKey,     setRefreshKey]    = useState(0)
+  const [employees,     setEmployees]   = useState(() => loadFromLS(LS_EMP, MOCK_EMPLOYEES))
+  const [managers,      setManagers]    = useState(() => loadFromLS(LS_MGR, MOCK_MANAGERS))
+  const [selectedMgrId, setSelectedMgrId] = useState('')
+  const [selectedEmpId, setSelectedEmpId] = useState('')
+  const [selectedMonth, setSelectedMonth] = useState('')
+  const [selectedWeeks, setSelectedWeeks] = useState([])
+  const [showAdmin,     setShowAdmin]    = useState(false)
+  const [refreshKey,    setRefreshKey]   = useState(0)
 
   const { sheetData, loadingIds, errorIds, loadEmployee, loadAll } = useGoogleSheets()
 
   // ── Derived lists ──────────────────────────────────────────────────────────
-  const activeMgrIds = useMemo(() =>
-    [...new Set(employees.filter(e => e.probationStatus === 'active').map(e => e.managerId))],
-    [employees])
-
-  const tabEmployees = useMemo(() =>
-    employees.filter(e => e.probationStatus === (activeTab === 'active' ? 'active' : 'confirmed')),
-    [employees, activeTab])
-
   const filteredByMgr = useMemo(() =>
-    selectedMgrId ? tabEmployees.filter(e => e.managerId === selectedMgrId) : tabEmployees,
-    [tabEmployees, selectedMgrId])
+    selectedMgrId ? employees.filter(e => e.managerId === selectedMgrId) : employees,
+    [employees, selectedMgrId])
 
   const selectedEmployee = useMemo(() =>
     employees.find(e => e.id === selectedEmpId) ?? null, [employees, selectedEmpId])
@@ -118,21 +107,12 @@ export default function App() {
   useEffect(() => { saveToLS(LS_EMP, employees) }, [employees])
   useEffect(() => { saveToLS(LS_MGR, managers)  }, [managers])
 
-  // ── Initial load — all employees (to prefill scores in list) ──────────────
+  // ── Initial load — all employees ──────────────────────────────────────────
   useEffect(() => {
     loadAll(employees)
   }, [refreshKey])
 
   // ── Handlers ──────────────────────────────────────────────────────────────
-  const handleConfirmProbation = useCallback(empId => {
-    setEmployees(prev => prev.map(e =>
-      e.id === empId ? { ...e, probationStatus: 'confirmed', confirmationDate: new Date().toISOString().slice(0, 10) } : e
-    ))
-    setConfirmTarget(null)
-    // Switch to confirmed tab to show the moved employee
-    setActiveTab('confirmed')
-  }, [])
-
   const handleSaveEmployees = useCallback(emps => {
     setEmployees(emps)
     setRefreshKey(k => k + 1)
@@ -146,26 +126,19 @@ export default function App() {
     setRefreshKey(k => k + 1)
   }, [])
 
-  const isLoading = loadingIds.size > 0 && Array.from(loadingIds).some(id =>
-    filteredByMgr.find(e => e.id === id))
-
-  const activeCount    = employees.filter(e => e.probationStatus === 'active').length
-  const confirmedCount = employees.filter(e => e.probationStatus === 'confirmed').length
+  const employeeCount = employees.length
 
   return (
     <div className="min-h-screen bg-np-bg font-sans">
-      {/* Header */}
       <Header
         onAdminClick={() => setShowAdmin(true)}
         onRefresh={handleRefresh}
         isRefreshing={loadingIds.size > 0}
       />
 
-      {/* Content — offset for fixed header */}
       <div className="pt-16">
-        {/* ── Top filter bar ── */}
+        {/* ── Filter bar ── */}
         <div className="bg-white border-b border-np-border px-6 py-3 flex items-center gap-4 flex-wrap shadow-sm">
-          {/* Manager selector */}
           <div className="flex items-center gap-2">
             <label className="text-xs font-semibold text-np-muted uppercase tracking-wide whitespace-nowrap">Manager</label>
             <div className="relative">
@@ -185,7 +158,6 @@ export default function App() {
 
           <div className="h-5 w-px bg-np-border" />
 
-          {/* Employee selector */}
           <div className="flex items-center gap-2">
             <label className="text-xs font-semibold text-np-muted uppercase tracking-wide whitespace-nowrap">Employee</label>
             <div className="relative">
@@ -203,47 +175,19 @@ export default function App() {
             </div>
           </div>
 
-          {/* Stats chips */}
           <div className="ml-auto flex items-center gap-2">
-            <Chip icon={<Users size={11}/>} label={`${activeCount} Active`}    color="amber" />
-            <Chip icon={<UserCheck size={11}/>} label={`${confirmedCount} Confirmed`} color="green" />
+            <Chip icon={<Users size={11}/>} label={`${employeeCount} Employees`} color="blue" />
           </div>
         </div>
 
-        {/* ── Tab bar ── */}
-        <div className="bg-white border-b border-np-border px-6 flex items-end gap-1">
-          <button
-            onClick={() => setActiveTab('active')}
-            className={activeTab === 'active' ? 'tab-btn-active' : 'tab-btn-inactive'}
-          >
-            <span className="flex items-center gap-1.5">
-              <Users size={13}/> Active Probation
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
-                {activeCount}
-              </span>
-            </span>
-          </button>
-          <button
-            onClick={() => setActiveTab('confirmed')}
-            className={activeTab === 'confirmed' ? 'tab-btn-active' : 'tab-btn-inactive'}
-          >
-            <span className="flex items-center gap-1.5">
-              <UserCheck size={13}/> Confirmed Records
-              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">
-                {confirmedCount}
-              </span>
-            </span>
-          </button>
-        </div>
-
         {/* ── Main layout ── */}
-        <div className="flex gap-0 min-h-[calc(100vh-128px)]">
+        <div className="flex gap-0 min-h-[calc(100vh-112px)]">
           {/* Left: employee list */}
           <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
             <div className="p-4 space-y-2">
               <div className="flex items-center justify-between mb-1">
                 <p className="section-title">
-                  {activeTab === 'active' ? 'Active Employees' : 'Confirmed Employees'}
+                  Employees
                   <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
                 </p>
               </div>
@@ -267,7 +211,6 @@ export default function App() {
                     isSelected={emp.id === selectedEmpId}
                     isLoading={loadingIds.has(emp.id)}
                     onClick={() => setSelectedEmpId(emp.id)}
-                    onConfirm={setConfirmTarget}
                   />
                 ))
               )}
@@ -290,9 +233,9 @@ export default function App() {
                         {selectedManager?.role && ` · ${selectedManager.role}`}
                       </p>
                       {errorIds[selectedEmpId] && (
-                        <div className="mt-2 flex items-center gap-1.5 text-xs text-red-600">
-                          <AlertCircle size={12}/>
-                          Sheet error: {errorIds[selectedEmpId]} — showing demo data
+                        <div className="mt-2 flex items-start gap-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 max-w-lg">
+                          <AlertCircle size={12} className="shrink-0 mt-0.5"/>
+                          <span>{errorIds[selectedEmpId]}</span>
                         </div>
                       )}
                       {!selectedEmployee.sheetUrl && (
@@ -303,44 +246,23 @@ export default function App() {
                         </div>
                       )}
                     </div>
-                    <div className="flex items-center gap-2">
-                      {selectedEmployee.probationStatus === 'active' && (
-                        <button
-                          onClick={() => setConfirmTarget(selectedEmployee)}
-                          className="btn-success text-xs"
-                        >
-                          <UserCheck size={13}/> Mark as Confirmed
-                        </button>
-                      )}
-                      <button
-                        onClick={() => loadEmployee(selectedEmployee, true)}
-                        className="btn-secondary text-xs"
-                        disabled={loadingIds.has(selectedEmpId)}
-                      >
-                        <RefreshCw size={12} className={loadingIds.has(selectedEmpId) ? 'animate-spin' : ''}/>
-                        Refresh
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => loadEmployee(selectedEmployee, true)}
+                      className="btn-secondary text-xs"
+                      disabled={loadingIds.has(selectedEmpId)}
+                    >
+                      <RefreshCw size={12} className={loadingIds.has(selectedEmpId) ? 'animate-spin' : ''}/>
+                      Refresh
+                    </button>
                   </div>
                 </div>
 
                 {/* ── Probation + Monthly score row ── */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  {/* Probation status */}
                   <div className="card">
                     <p className="section-title mb-3">Probation Status</p>
                     <ProbationBadge employee={selectedEmployee} />
 
-                    {selectedEmployee.probationStatus === 'confirmed' && (
-                      <div className="mt-3 px-3 py-2.5 rounded-lg bg-green-50 border border-green-200 text-xs text-green-700 font-medium">
-                        Confirmed — Probation ended on:{' '}
-                        <span className="font-bold">{selectedEmployee.confirmationDate
-                          ? new Date(selectedEmployee.confirmationDate).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
-                          : '—'}</span>
-                      </div>
-                    )}
-
-                    {/* Performance summary */}
                     {empWeeklyData.length > 0 && (
                       <div className="mt-4 pt-4 border-t border-np-border">
                         <p className="section-title mb-2">Overall Summary</p>
@@ -348,12 +270,17 @@ export default function App() {
                           <SummaryStat label="Total Weeks" value={empWeeklyData.length} />
                           <SummaryStat
                             label="Avg Score"
-                            value={averageScore(empWeeklyData)?.toFixed(1) ?? '—'}
+                            value={averageScore(empWeeklyData) !== null
+                              ? `${Math.round(averageScore(empWeeklyData))}%`
+                              : '—'}
                             color="#1579be"
                           />
                           <SummaryStat
                             label="Best Score"
-                            value={Math.max(...empWeeklyData.filter(w => w.managerScore).map(w => w.managerScore)).toFixed(1)}
+                            value={(() => {
+                              const scores = empWeeklyData.filter(w => w.managerScore !== null).map(w => w.managerScore)
+                              return scores.length ? `${Math.round(Math.max(...scores))}%` : '—'
+                            })()}
                             color="#16A34A"
                           />
                         </div>
@@ -361,7 +288,6 @@ export default function App() {
                     )}
                   </div>
 
-                  {/* Monthly score gauge */}
                   <div>
                     <p className="section-title mb-3">Monthly Performance</p>
                     {loadingIds.has(selectedEmpId) ? (
@@ -412,7 +338,6 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Modals ── */}
       {showAdmin && (
         <SheetLinkManager
           employees={employees}
@@ -420,15 +345,6 @@ export default function App() {
           onSaveEmployees={handleSaveEmployees}
           onSaveManagers={handleSaveManagers}
           onClose={() => setShowAdmin(false)}
-        />
-      )}
-
-      {confirmTarget && (
-        <ConfirmationModal
-          employee={confirmTarget}
-          manager={managers.find(m => m.id === confirmTarget.managerId)}
-          onConfirm={handleConfirmProbation}
-          onCancel={() => setConfirmTarget(null)}
         />
       )}
     </div>
@@ -439,6 +355,7 @@ export default function App() {
 
 function Chip({ icon, label, color }) {
   const colors = {
+    blue:  'bg-blue-50 text-blue-700 border-blue-200',
     amber: 'bg-amber-50 text-amber-700 border-amber-200',
     green: 'bg-green-50 text-green-700 border-green-200',
   }

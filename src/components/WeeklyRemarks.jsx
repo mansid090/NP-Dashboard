@@ -1,74 +1,60 @@
 import React, { useState } from 'react'
-import { MessageSquare, ChevronDown, ChevronUp, CheckSquare, Square, Star } from 'lucide-react'
+import { MessageSquare, ChevronDown, ChevronUp, CheckSquare, Square } from 'lucide-react'
 
-function ScoreStars({ score, max = 10 }) {
-  const filled = Math.round((score / max) * 5)
-  return (
-    <div className="flex gap-0.5">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <Star key={i} size={11} className={i < filled ? 'text-amber-400 fill-amber-400' : 'text-np-border'} />
-      ))}
-    </div>
-  )
+function scoreColor(score) {
+  if (score === null) return '#94A3B8'
+  if (score >= 90)   return '#16A34A'
+  if (score >= 70)   return '#1579be'
+  if (score >= 50)   return '#D97706'
+  return '#DC2626'
 }
 
 function WeekCard({ week }) {
   const [open, setOpen] = useState(true)
   const score = week.managerScore
-
-  const scoreColor = score === null ? '#94A3B8'
-    : score >= 9 ? '#16A34A'
-    : score >= 7 ? '#1579be'
-    : score >= 5 ? '#D97706'
-    : '#DC2626'
+  const color = scoreColor(score)
 
   return (
     <div className="border border-np-border rounded-xl overflow-hidden week-card transition-all duration-200 animate-fade-in-up">
-      {/* Header */}
       <button
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between px-4 py-3 bg-np-bg hover:bg-np-blue-light transition-colors"
       >
         <div className="flex items-center gap-3">
-          <div className="w-1.5 h-5 rounded-full" style={{ background: scoreColor }} />
+          <div className="w-1.5 h-5 rounded-full" style={{ background: color }} />
           <span className="text-sm font-semibold text-np-text">{week.weekRange}</span>
           {score !== null && (
-            <div className="flex items-center gap-1.5">
-              <span
-                className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
-                style={{ background: scoreColor }}
-              >
-                {Number(score).toFixed(1)}
-              </span>
-              <ScoreStars score={score} />
-            </div>
+            <span
+              className="text-xs font-bold px-2 py-0.5 rounded-full text-white"
+              style={{ background: color }}
+            >
+              {Math.round(score)}%
+            </span>
           )}
         </div>
         {open ? <ChevronUp size={15} className="text-np-muted" /> : <ChevronDown size={15} className="text-np-muted" />}
       </button>
 
-      {/* Body */}
       {open && (
         <div className="px-4 py-4 space-y-3 bg-white border-t border-np-border">
-          <Field label="One Thing" value={week.oneThing} accent="#1579be" />
-          <Field label="Additional Goal" value={week.additionalGoal} accent="#8B5CF6" />
-          <Field label="Learnings of the Week" value={week.learnings} accent="#0891B2" />
-          <Field label="Self Comments" value={week.selfComments} accent="#64748B" />
+          <Field label="One Thing"             value={week.oneThing}       accent="#1579be" />
+          <Field label="Additional Goal"       value={week.additionalGoal} accent="#8B5CF6" />
+          <Field label="Learnings of the Week" value={week.learnings}      accent="#0891B2" />
+          <Field label="Self Comments"         value={week.selfComments}   accent="#64748B" />
 
-          {/* Manager section */}
           <div className="mt-3 pt-3 border-t border-dashed border-np-border">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs font-bold text-np-text uppercase tracking-wide">Manager Review</span>
               {score !== null && (
                 <span className="text-xs font-bold px-2.5 py-1 rounded-lg text-white"
-                      style={{ background: scoreColor }}>
-                  Score: {Number(score).toFixed(1)} / 10
+                      style={{ background: color }}>
+                  {Math.round(score)}% completion
                 </span>
               )}
             </div>
             {week.managerComment ? (
               <div className="px-3 py-2.5 rounded-lg text-sm text-np-text leading-relaxed"
-                   style={{ background: `${scoreColor}12`, borderLeft: `3px solid ${scoreColor}` }}>
+                   style={{ background: `${color}12`, borderLeft: `3px solid ${color}` }}>
                 {week.managerComment}
               </div>
             ) : (
@@ -126,7 +112,6 @@ export default function WeeklyRemarks({ weeklyData, selectedWeeks, onWeeksChange
 
   return (
     <div className="space-y-4">
-      {/* Week selector */}
       <div className="card">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -141,11 +126,8 @@ export default function WeeklyRemarks({ weeklyData, selectedWeeks, onWeeksChange
         <div className="flex flex-wrap gap-2">
           {allWeekRanges.map((range, i) => {
             const checked = selectedWeeks.includes(range)
-            const week    = weeklyData[i]
-            const score   = week?.managerScore
-            const color   = score === null ? '#94A3B8'
-              : score >= 9 ? '#16A34A' : score >= 7 ? '#1579be'
-              : score >= 5 ? '#D97706' : '#DC2626'
+            const score   = weeklyData[i]?.managerScore
+            const color   = scoreColor(score)
             return (
               <button
                 key={range}
@@ -160,7 +142,7 @@ export default function WeeklyRemarks({ weeklyData, selectedWeeks, onWeeksChange
                 {range}
                 {score !== null && (
                   <span className={`font-bold ${checked ? 'text-white/80' : ''}`}>
-                    · {Number(score).toFixed(0)}
+                    · {Math.round(score)}%
                   </span>
                 )}
               </button>
@@ -169,7 +151,6 @@ export default function WeeklyRemarks({ weeklyData, selectedWeeks, onWeeksChange
         </div>
       </div>
 
-      {/* Remarks cards */}
       {selectedWeeks.length === 0 ? (
         <div className="text-center py-8 text-np-muted text-sm">
           Select one or more weeks above to view details

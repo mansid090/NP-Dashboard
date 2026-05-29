@@ -1,23 +1,21 @@
 import Papa from 'papaparse'
 
 /*
-  Expected Google Sheet layout (column-based — one column per week):
-  ──────────────────────────────────────────────────────────────────
-  Row 0 │ [blank]               │ 24 May – 1 Jun  │ 1 Jun – 8 Jun  │ …
-  Row 1 │ One Thing             │ employee text   │ employee text  │ …
-  Row 2 │ Additional Goal       │ employee text   │ employee text  │ …
-  Row 3 │ Learnings of the Week │ employee text   │ employee text  │ …
-  Row 4 │ Self Comments         │ employee text   │ employee text  │ …
-  Row 5 │ Manager Score         │ 8               │ 7.5            │ …
-  Row 6 │ Manager Comment       │ manager text    │ manager text   │ …
-  ──────────────────────────────────────────────────────────────────
+  Supported Google Sheet layout — row-based (one block of 7 rows per week):
+  ──────────────────────────────────────────────────────────────────────────
+  Row │ Week Starts from  │ [blank] │ 5/05/26 - 11/05/26 │ …
+  Row │ One Thing         │ employee text
+  Row │ Additional Goal   │ employee text
+  Row │ Learnings of the Week │ employee text
+  Row │ Self Comments     │ employee text
+  Row │ Manager Score     │ -30   ← negative = penalty; -30 means 70% completion
+  Row │ Manager Comment   │ manager text
+  ──────────────────────────────────────────────────────────────────────────
 
-  Row-based variation (each week is a labelled block) is also supported.
-  The parser tries column-based first, then falls back to row-based.
+  Score encoding: if task completion is 70% → enter -30; 80% → -20; 60% → -40
+  Dashboard converts to positive percentage: 100 + (-30) = 70%
 
-  HOW TO PUBLISH YOUR GOOGLE SHEET:
-  File → Share → Publish to web → Select "Comma-separated values (.csv)"
-  Copy the link and paste it into the admin panel sheet URL field.
+  Also supports the old column-based layout (one column per week).
 */
 
 const FIELD_ALIASES = {
@@ -43,13 +41,9 @@ function extractSheetId(url) {
 }
 
 function buildCsvUrl(sheetUrl) {
-  // Already a CSV/published URL
   if (sheetUrl.includes('pub?') || sheetUrl.includes('output=csv')) return sheetUrl
-
   const id = extractSheetId(sheetUrl)
   if (!id) throw new Error('Cannot extract sheet ID from URL: ' + sheetUrl)
-
-  // Prefer the gviz endpoint — works for sheets shared with "anyone with link"
   return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv`
 }
 
@@ -59,7 +53,6 @@ async function fetchCsv(url) {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return await res.text()
   } catch {
-    // CORS proxy fallback — suitable for demo; use a backend proxy in production
     const proxy = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`
     const res = await fetch(proxy)
     if (!res.ok) throw new Error('Proxy fetch failed')
@@ -68,11 +61,28 @@ async function fetchCsv(url) {
   }
 }
 
+// Convert raw score value to completion percentage (0–100)
+// Excel format: -30 = 70% completion, -20 = 80%, -40 = 60%
+function toCompletionPct(rawVal) {
+  if (rawVal === null || rawVal === undefined || rawVal === '') return null
+  // Skip template placeholder text
+  const str = String(rawVal).trim()
+  if (str.startsWith('//')) return null
+  const num = typeof rawVal === 'number' ? rawVal : parseFloat(str)
+  if (isNaN(num)) return null
+  // Negative values are the penalty encoding
+  if (num < 0) return Math.max(0, Math.min(100, 100 + num))
+  // Positive values: if already in 0–100 range treat as percentage, else as /10 score
+  if (num <= 10) return Math.round(num * 10)
+  return Math.min(100, num)
+}
+
 function parseColumnBased(rows) {
   if (rows.length < 2) return null
-
   const headerRow = rows[0]
-  // Collect week columns (non-empty cells in row 0, starting from col 1)
+  // New row-based format has "Week Starts from" in first cell — bail out
+  if (/^week/i.test((headerRow[0] || '').trim())) return null
+
   const weekCols = []
   for (let c = 1; c < headerRow.length; c++) {
     const label = (headerRow[c] || '').trim()
@@ -80,14 +90,12 @@ function parseColumnBased(rows) {
   }
   if (!weekCols.length) return null
 
-  // Map each data row's label to a field key
   const fieldRows = {}
   for (let r = 1; r < rows.length; r++) {
     const key = matchField(rows[r][0])
     if (key && !fieldRows[key]) fieldRows[key] = r
   }
 
-  // Require at least score OR comment column to accept this format
   if (!fieldRows.managerScore && !fieldRows.managerComment) return null
 
   const getVal = (rowIdx, col) =>
@@ -100,45 +108,66 @@ function parseColumnBased(rows) {
     additionalGoal: getVal(fieldRows.additionalGoal, col),
     learnings:      getVal(fieldRows.learnings, col),
     selfComments:   getVal(fieldRows.selfComments, col),
-    managerScore:   parseFloat(getVal(fieldRows.managerScore, col)) || null,
+    managerScore:   toCompletionPct(rows[fieldRows.managerScore]?.[col]),
     managerComment: getVal(fieldRows.managerComment, col),
   })).filter(w => w.weekRange && (w.managerScore !== null || w.managerComment))
 }
 
 function parseRowBased(rows) {
-  // Detect blocks: each block starts with a row whose first cell contains a date-like range
-  const datePattern = /\d+\s+\w+\s*[-–]\s*\d+\s+\w+|\w+\s+\d+\s*[-–]\s*\w+\s+\d+/i
+  const oldDatePattern = /\d+\s+\w+\s*[-–]\s*\d+\s+\w+|\w+\s+\d+\s*[-–]\s*\w+\s+\d+/i
+  const newWeekPattern = /^week/i  // "Week Starts from"
   const weeks = []
   let current = null
 
   for (const row of rows) {
     const cell0 = (row[0] || '').trim()
-    const cell1 = (row[1] || '').trim()
+    const cell2 = (row[2] || '').trim()
 
-    // New week block starts when the label cell looks like a date range
-    if (datePattern.test(cell0)) {
+    const isNewFormat = newWeekPattern.test(cell0)
+    const isOldFormat = !isNewFormat && oldDatePattern.test(cell0)
+
+    if (isNewFormat || isOldFormat) {
       if (current) weeks.push(current)
-      current = { weekRange: cell0, startDate: null, oneThing: '', additionalGoal: '',
-                   learnings: '', selfComments: '', managerScore: null, managerComment: '' }
+      const weekRange = isNewFormat ? cell2 : cell0
+      current = {
+        weekRange, startDate: null,
+        oneThing: '', additionalGoal: '', learnings: '',
+        selfComments: '', managerScore: null, managerComment: '',
+      }
       continue
     }
     if (!current) continue
 
     const key = matchField(cell0)
     if (key) {
-      if (key === 'managerScore') current[key] = parseFloat(cell1) || null
-      else current[key] = cell1
+      const rawVal = (row[1] !== null && row[1] !== undefined) ? row[1] : ''
+      if (key === 'managerScore') {
+        current[key] = toCompletionPct(rawVal)
+      } else {
+        const strVal = String(rawVal).trim()
+        current[key] = strVal.startsWith('//') ? '' : strVal
+      }
     }
   }
   if (current) weeks.push(current)
-  return weeks.filter(w => w.weekRange)
+
+  // Keep all weeks that have a valid date range — empty weeks display as blank, that's fine
+  return weeks.filter(w => w.weekRange && w.weekRange.trim())
 }
 
 export async function fetchSheetData(sheetUrl) {
   const csvUrl = buildCsvUrl(sheetUrl)
   const raw    = await fetchCsv(csvUrl)
+
+  // If we got an HTML page instead of CSV, the sheet is not shared/published correctly
+  if (raw.trimStart().startsWith('<')) {
+    throw new Error('Sheet is not accessible. Make sure it is published or shared as "Anyone with link can view".')
+  }
+
   const result = Papa.parse(raw, { skipEmptyLines: false })
   const rows   = result.data
+
+  console.log('[NP Dashboard] Raw sheet rows (first 10):', rows.slice(0, 10))
 
   const columnParsed = parseColumnBased(rows)
   if (columnParsed && columnParsed.length > 0) return columnParsed
@@ -146,5 +175,5 @@ export async function fetchSheetData(sheetUrl) {
   const rowParsed = parseRowBased(rows)
   if (rowParsed && rowParsed.length > 0) return rowParsed
 
-  throw new Error('Could not detect sheet structure. See console for raw data.')
+  throw new Error('Could not read sheet. Make sure the sheet follows the 30-60-90 tracker format — "Week Starts from" in column A, date range in column C, one block of 7 rows per week.')
 }
