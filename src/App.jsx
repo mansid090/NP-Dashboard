@@ -11,6 +11,7 @@ import { SkeletonCard } from './components/LoadingOverlay'
 import { useConfig }          from './hooks/useConfig'
 import { useGoogleSheets }    from './hooks/useGoogleSheets'
 import { groupByMonth, averageScore } from './utils/dateUtils'
+import ProbationEndedPage     from './components/ProbationEndedPage'
 
 export default function App() {
   const { employees, managers, loading: configLoading, error: configError, configured } = useConfig()
@@ -189,14 +190,25 @@ export default function App() {
         {/* ── Main layout ── */}
         <div className="flex gap-0 min-h-[calc(100vh-144px)]">
 
-          {/* Left: employee list (both tabs) */}
+          {/* ── Probation Ended tab — full width card grid ── */}
+          {activePage === 'ended' && (
+            <div className="flex-1 overflow-y-auto">
+              <ProbationEndedPage
+                employees={endedEmployees}
+                managers={managers}
+                sheetData={sheetData}
+                loadingIds={loadingIds}
+              />
+            </div>
+          )}
+
+          {/* ── Active Probation tab — sidebar + detail ── */}
+          {activePage === 'active' && <>
           <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
             <div className="p-4 space-y-2">
               <p className="section-title mb-3">
-                {activePage === 'ended' ? 'Probation Ended' : 'Employees'}
-                <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
+                Employees <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
               </p>
-
               {filteredByMgr.length === 0 ? (
                 <div className="text-center py-12">
                   <Users size={28} className="text-np-muted mx-auto mb-2" />
@@ -218,7 +230,6 @@ export default function App() {
             </div>
           </aside>
 
-          {/* Right: detail panel (both tabs) */}
           <main className="flex-1 overflow-y-auto p-6">
             {!selectedEmployee ? (
               <SelectPrompt />
@@ -315,6 +326,7 @@ export default function App() {
               </div>
             )}
           </main>
+          </>}
         </div>
       </div>
     </div>
