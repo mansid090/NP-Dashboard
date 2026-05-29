@@ -48,8 +48,13 @@ function toCompletionPct(rawVal) {
 
 function parseColumnBased(rows) {
   if (rows.length < 2) return null
-  // Row-based format starts with "Week Starts from" — bail out
-  if (/^week/i.test((rows[0][0] || '').trim())) return null
+
+  // If ANY cell in row 1 contains "Week Starts from", this is row-based
+  if (rows[0].some(cell => /^week/i.test((cell || '').trim()))) return null
+
+  // If row 2's first cell is a known tracker field label, this is row-based
+  // (happens when merged "Week Starts from" cell exports as empty in col A)
+  if (rows[1] && matchField((rows[1][0] || '').trim())) return null
 
   const weekCols = []
   for (let c = 1; c < rows[0].length; c++) {
