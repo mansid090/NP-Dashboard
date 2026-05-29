@@ -11,7 +11,6 @@ import { SkeletonCard } from './components/LoadingOverlay'
 import { useConfig }          from './hooks/useConfig'
 import { useGoogleSheets }    from './hooks/useGoogleSheets'
 import { groupByMonth, averageScore } from './utils/dateUtils'
-import ProbationEndedPage     from './components/ProbationEndedPage'
 
 export default function App() {
   const { employees, managers, loading: configLoading, error: configError, configured } = useConfig()
@@ -189,27 +188,13 @@ export default function App() {
 
         {/* ── Main layout ── */}
         <div className="flex gap-0 min-h-[calc(100vh-144px)]">
-          {/* ── Probation Ended page (full-width, no sidebar) ── */}
-          {activePage === 'ended' && (
-            <div className="flex-1 overflow-y-auto">
-              <ProbationEndedPage
-                employees={endedEmployees}
-                managers={managers}
-                sheetData={sheetData}
-                loadingIds={loadingIds}
-                selectedEmpId={selectedEmpId}
-                onSelectEmployee={setSelectedEmpId}
-                selectedMgrId={selectedMgrId}
-                onSelectManager={setSelectedMgrId}
-              />
-            </div>
-          )}
 
-          {/* Left: employee list */}
-          {activePage === 'active' && <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
+          {/* Left: employee list (both tabs) */}
+          <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
             <div className="p-4 space-y-2">
               <p className="section-title mb-3">
-                Employees <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
+                {activePage === 'ended' ? 'Probation Ended' : 'Employees'}
+                <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
               </p>
 
               {filteredByMgr.length === 0 ? (
@@ -231,10 +216,10 @@ export default function App() {
                 ))
               )}
             </div>
-          </aside>}
+          </aside>
 
-          {/* Right: detail (active tab only) */}
-          {activePage === 'active' && <main className="flex-1 overflow-y-auto p-6">
+          {/* Right: detail panel (both tabs) */}
+          <main className="flex-1 overflow-y-auto p-6">
             {!selectedEmployee ? (
               <SelectPrompt />
             ) : (
@@ -329,7 +314,7 @@ export default function App() {
 
               </div>
             )}
-          </main>}
+          </main>
         </div>
       </div>
     </div>
