@@ -11,7 +11,6 @@ import SheetLinkManager  from './components/SheetLinkManager'
 import { LoadingOverlay, SkeletonCard } from './components/LoadingOverlay'
 
 import { useGoogleSheets }  from './hooks/useGoogleSheets'
-import { MOCK_MANAGERS, MOCK_EMPLOYEES } from './data/mockData'
 import { groupByMonth, averageScore }   from './utils/dateUtils'
 
 // ── LocalStorage helpers ──────────────────────────────────────────────────────
@@ -28,8 +27,8 @@ function saveToLS(key, val) {
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
-  const [employees,     setEmployees]   = useState(() => loadFromLS(LS_EMP, MOCK_EMPLOYEES))
-  const [managers,      setManagers]    = useState(() => loadFromLS(LS_MGR, MOCK_MANAGERS))
+  const [employees,     setEmployees]   = useState(() => loadFromLS(LS_EMP, []))
+  const [managers,      setManagers]    = useState(() => loadFromLS(LS_MGR, []))
   const [selectedMgrId, setSelectedMgrId] = useState('')
   const [selectedEmpId, setSelectedEmpId] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
@@ -193,13 +192,22 @@ export default function App() {
               </div>
 
               {filteredByMgr.length === 0 ? (
-                <div className="text-center py-12">
+                <div className="text-center py-12 px-3">
                   <Layers size={28} className="text-np-muted mx-auto mb-2" />
-                  <p className="text-sm text-np-muted">No employees found</p>
-                  <button onClick={() => setShowAdmin(true)}
-                    className="mt-3 text-xs text-np-blue hover:underline">
-                    + Add employees in Settings
-                  </button>
+                  <p className="text-sm font-semibold text-np-text mb-1">
+                    {employees.length === 0 ? 'No employees yet' : 'No employees found'}
+                  </p>
+                  <p className="text-xs text-np-muted mb-3">
+                    {employees.length === 0
+                      ? 'Add managers and employees in Settings to get started.'
+                      : 'Try selecting a different manager.'}
+                  </p>
+                  {employees.length === 0 && (
+                    <button onClick={() => setShowAdmin(true)}
+                      className="btn-primary text-xs mx-auto">
+                      <Users size={12}/> Open Settings
+                    </button>
+                  )}
                 </div>
               ) : (
                 filteredByMgr.map(emp => (
@@ -220,7 +228,7 @@ export default function App() {
           {/* Right: employee detail */}
           <main className="flex-1 overflow-y-auto p-6">
             {!selectedEmployee ? (
-              <EmptyState onAdmin={() => setShowAdmin(true)} />
+              <EmptyState onAdmin={() => setShowAdmin(true)} hasEmployees={employees.length > 0} />
             ) : (
               <div className="max-w-5xl mx-auto space-y-5 animate-fade-in-up" key={selectedEmpId}>
                 {/* ── Employee header ── */}
@@ -375,7 +383,32 @@ function SummaryStat({ label, value, color }) {
   )
 }
 
-function EmptyState({ onAdmin }) {
+function EmptyState({ onAdmin, hasEmployees }) {
+  if (!hasEmployees) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center animate-fade-in px-6">
+        <div className="w-20 h-20 rounded-2xl bg-np-blue-light border border-np-blue/20 flex items-center justify-center mb-5">
+          <BarChart3 size={36} className="text-np-blue" />
+        </div>
+        <h3 className="text-xl font-bold text-np-text mb-2">Welcome to NP Probation Dashboard</h3>
+        <p className="text-sm text-np-muted max-w-sm mb-6">
+          No data yet. Set up your team in Settings to get started.
+        </p>
+
+        {/* Setup steps */}
+        <div className="text-left max-w-sm w-full space-y-3 mb-6">
+          <Step n="1" title="Add Managers" desc="Add each reporting manager with their name and role." />
+          <Step n="2" title="Add Employees" desc="Add each probation employee and assign them to a manager." />
+          <Step n="3" title="Link Google Sheets" desc="Paste each employee's 30-60-90 tracker sheet URL." />
+        </div>
+
+        <button onClick={onAdmin} className="btn-primary text-sm">
+          <Users size={14}/> Open Settings to Get Started
+        </button>
+      </div>
+    )
+  }
+
   return (
     <div className="flex flex-col items-center justify-center h-full min-h-[60vh] text-center animate-fade-in">
       <div className="w-20 h-20 rounded-2xl bg-np-blue-light border border-np-blue/20 flex items-center justify-center mb-5">
@@ -385,10 +418,20 @@ function EmptyState({ onAdmin }) {
       <p className="text-sm text-np-muted max-w-xs">
         Choose a manager and employee from the list on the left to view their performance snapshot.
       </p>
-      <button onClick={onAdmin}
-        className="mt-5 btn-secondary text-xs">
-        <Users size={13}/> Manage Employees
-      </button>
+    </div>
+  )
+}
+
+function Step({ n, title, desc }) {
+  return (
+    <div className="flex items-start gap-3">
+      <div className="w-7 h-7 rounded-full bg-np-blue text-white text-xs font-bold flex items-center justify-center shrink-0 mt-0.5">
+        {n}
+      </div>
+      <div>
+        <p className="text-sm font-semibold text-np-text">{title}</p>
+        <p className="text-xs text-np-muted">{desc}</p>
+      </div>
     </div>
   )
 }
