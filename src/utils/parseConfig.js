@@ -2,6 +2,7 @@ import Papa from 'papaparse'
 import { buildCsvUrl, fetchCsv } from './fetchCsv'
 
 // Convert various date formats → YYYY-MM-DD
+// Recommended format in the config sheet: DD/MM/YYYY  e.g. 28/02/2026
 function parseDate(raw) {
   if (!raw) return ''
   const s = String(raw).trim()
@@ -10,11 +11,21 @@ function parseDate(raw) {
   // Already ISO: 2026-02-28
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s
 
-  // DD/MM/YYYY or D/M/YYYY
+  // Google Sheets serial number (days since 30 Dec 1899)
+  // e.g. 46116 = 28 Feb 2026
+  const num = Number(s)
+  if (!isNaN(num) && num > 10000 && num < 200000 && !s.includes('/') && !s.includes('-')) {
+    const msPerDay    = 24 * 60 * 60 * 1000
+    const sheetEpoch  = new Date(Date.UTC(1899, 11, 30))
+    const date        = new Date(sheetEpoch.getTime() + num * msPerDay)
+    return date.toISOString().slice(0, 10)
+  }
+
+  // DD/MM/YYYY  (recommended — unambiguous)
   const dmy = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/)
   if (dmy) return `${dmy[3]}-${dmy[2].padStart(2,'0')}-${dmy[1].padStart(2,'0')}`
 
-  // DD/MM/YY
+  // DD/MM/YY  e.g. 28/02/26 → 2026-02-28
   const dmyShort = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/)
   if (dmyShort) return `20${dmyShort[3]}-${dmyShort[2].padStart(2,'0')}-${dmyShort[1].padStart(2,'0')}`
 
@@ -22,7 +33,7 @@ function parseDate(raw) {
   const dmy2 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
   if (dmy2) return `${dmy2[3]}-${dmy2[2].padStart(2,'0')}-${dmy2[1].padStart(2,'0')}`
 
-  // Fallback: try native Date (handles "28 Feb 2026", "Feb 28 2026", etc.)
+  // "28 Feb 2026" / "Feb 28 2026"
   const d = new Date(s)
   if (!isNaN(d)) return d.toISOString().slice(0, 10)
 

@@ -15,4 +15,4 @@
 //
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const CONFIG_SHEET_URL = ''   // ← paste your Master Config Sheet URL here
+export const CONFIG_SHEET_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSObBEhyEg8H-jARJTCnfukch6QMho9NZdV4SbNhunqkWNPcGN4Yl9sUWw-hegRQkjAs5bCVW8i43Hc/pubhtml'

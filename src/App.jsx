@@ -6,7 +6,6 @@ import EmployeeCard from './components/EmployeeCard'
 import ProbationBadge from './components/ProbationBadge'
 import MonthlyScore from './components/MonthlyScore'
 import WeeklyRemarks from './components/WeeklyRemarks'
-import ReportDownload from './components/ReportDownload'
 import { SkeletonCard } from './components/LoadingOverlay'
 
 import { useConfig }       from './hooks/useConfig'
@@ -279,20 +278,6 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Export */}
-                <div>
-                  <p className="section-title mb-3">Export Report</p>
-                  <ReportDownload
-                    employee={selectedEmployee}
-                    manager={selectedManager}
-                    weeklyData={empWeeklyData}
-                    selectedWeeks={selectedWeeks}
-                    selectedMonth={selectedMonth}
-                    allEmployees={employees}
-                    managers={managers}
-                    allSheetData={sheetData}
-                  />
-                </div>
               </div>
             )}
           </main>
