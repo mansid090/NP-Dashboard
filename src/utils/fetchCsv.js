@@ -1,7 +1,22 @@
 // Shared CSV fetching utility used by both the config sheet and tracker sheets
 
 export function buildCsvUrl(sheetUrl) {
-  if (sheetUrl.includes('pub?') || sheetUrl.includes('output=csv')) return sheetUrl
+  // Already a CSV URL
+  if (sheetUrl.includes('output=csv')) return sheetUrl
+
+  // Published-to-web HTML URL → swap pubhtml for pub?output=csv
+  // e.g. https://docs.google.com/spreadsheets/d/e/LONG_KEY/pubhtml
+  if (sheetUrl.includes('/pub') && sheetUrl.includes('/d/e/')) {
+    return sheetUrl.replace(/\/pubhtml.*$/, '/pub?output=csv')
+                   .replace(/\/pub(\?.*)?$/, '/pub?output=csv')
+  }
+
+  // pub? URL without output=csv — add it
+  if (sheetUrl.includes('pub?')) {
+    return sheetUrl.includes('?') ? sheetUrl + '&output=csv' : sheetUrl + '?output=csv'
+  }
+
+  // Regular sheet URL — extract the sheet ID and use gviz CSV endpoint
   const m = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/)
   if (!m) throw new Error('Cannot extract sheet ID from URL: ' + sheetUrl)
   return `https://docs.google.com/spreadsheets/d/${m[1]}/gviz/tq?tqx=out:csv`
