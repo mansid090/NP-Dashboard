@@ -177,23 +177,22 @@ function parseStackedCell(rows) {
   const splitA = cellA.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
   const splitB = cellB.split(/\r?\n/).map(s => s.trim()).filter(Boolean)
 
-  // Build field map by pairing label rows with value rows
+  // Build field map by pairing label rows with value rows.
+  // "Week Starts from" is a heading — skip it WITHOUT consuming a value index.
   const fieldData = {}
   let weekRange = cellC
+  let valueIdx = 0
 
-  splitA.forEach((label, i) => {
-    const val = (splitB[i] || '').trim()
-    if (/^week/i.test(label)) {
-      // Date might be the value in same position, or in cellC
-      if (!weekRange && /\d/.test(val)) weekRange = val
-      return
-    }
+  for (const label of splitA) {
+    if (/^week/i.test(label.trim())) continue  // skip heading, don't advance valueIdx
+
     const key = matchField(label)
-    if (key) {
-      const clean = val.startsWith('//') ? '' : val
-      fieldData[key] = clean
+    if (key && valueIdx < splitB.length) {
+      const val = (splitB[valueIdx] || '').trim()
+      valueIdx++
+      fieldData[key] = val.startsWith('//') ? '' : val
     }
-  })
+  }
 
   // Process any remaining rows (Manager Score, Manager Comment etc.)
   for (let r = 1; r < rows.length; r++) {
