@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react'
-import { Users, BarChart3, ChevronDown, Info, AlertCircle, RefreshCw, Loader2, ExternalLink } from 'lucide-react'
+import { Users, BarChart3, ChevronDown, Info, AlertCircle, RefreshCw, Loader2, CheckCircle } from 'lucide-react'
 
 import Header       from './components/Header'
 import EmployeeCard from './components/EmployeeCard'
@@ -8,13 +8,15 @@ import MonthlyScore from './components/MonthlyScore'
 import WeeklyRemarks from './components/WeeklyRemarks'
 import { SkeletonCard } from './components/LoadingOverlay'
 
-import { useConfig }       from './hooks/useConfig'
-import { useGoogleSheets } from './hooks/useGoogleSheets'
+import { useConfig }          from './hooks/useConfig'
+import { useGoogleSheets }    from './hooks/useGoogleSheets'
 import { groupByMonth, averageScore } from './utils/dateUtils'
+import ProbationEndedPage     from './components/ProbationEndedPage'
 
 export default function App() {
   const { employees, managers, loading: configLoading, error: configError, configured } = useConfig()
 
+  const [activePage,    setActivePage]    = useState('active') // 'active' | 'ended'
   const [selectedMgrId, setSelectedMgrId] = useState('')
   const [selectedEmpId, setSelectedEmpId] = useState('')
   const [selectedMonth, setSelectedMonth] = useState('')
@@ -23,10 +25,15 @@ export default function App() {
 
   const { sheetData, loadingIds, errorIds, loadEmployee, loadAll, clearCache } = useGoogleSheets()
 
+  // ── Split employees by probation status ──────────────────────────────────
+  const activeEmployees = useMemo(() => employees.filter(e => !e.probationEnded), [employees])
+  const endedEmployees  = useMemo(() => employees.filter(e => e.probationEnded),  [employees])
+
   // ── Derived lists ─────────────────────────────────────────────────────────
-  const filteredByMgr = useMemo(() =>
-    selectedMgrId ? employees.filter(e => e.managerId === selectedMgrId) : employees,
-    [employees, selectedMgrId])
+  const filteredByMgr = useMemo(() => {
+    const pool = activePage === 'ended' ? endedEmployees : activeEmployees
+    return selectedMgrId ? pool.filter(e => e.managerId === selectedMgrId) : pool
+  }, [activeEmployees, endedEmployees, activePage, selectedMgrId])
 
   const selectedEmployee = useMemo(() =>
     employees.find(e => e.id === selectedEmpId) ?? null, [employees, selectedEmpId])
@@ -154,10 +161,52 @@ export default function App() {
           </div>
         </div>
 
+        {/* ── Tab bar ── */}
+        <div className="bg-white border-b border-np-border px-6 flex items-end gap-1">
+          <button
+            onClick={() => { setActivePage('active'); setSelectedEmpId('') }}
+            className={activePage === 'active' ? 'tab-btn-active' : 'tab-btn-inactive'}
+          >
+            <span className="flex items-center gap-1.5">
+              <Users size={13}/> Active Probation
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-700">
+                {activeEmployees.length}
+              </span>
+            </span>
+          </button>
+          <button
+            onClick={() => { setActivePage('ended'); setSelectedEmpId('') }}
+            className={activePage === 'ended' ? 'tab-btn-active' : 'tab-btn-inactive'}
+          >
+            <span className="flex items-center gap-1.5">
+              <CheckCircle size={13}/> Probation Ended
+              <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">
+                {endedEmployees.length}
+              </span>
+            </span>
+          </button>
+        </div>
+
         {/* ── Main layout ── */}
-        <div className="flex gap-0 min-h-[calc(100vh-112px)]">
+        <div className="flex gap-0 min-h-[calc(100vh-144px)]">
+          {/* ── Probation Ended page (full-width, no sidebar) ── */}
+          {activePage === 'ended' && (
+            <div className="flex-1 overflow-y-auto">
+              <ProbationEndedPage
+                employees={endedEmployees}
+                managers={managers}
+                sheetData={sheetData}
+                loadingIds={loadingIds}
+                selectedEmpId={selectedEmpId}
+                onSelectEmployee={setSelectedEmpId}
+                selectedMgrId={selectedMgrId}
+                onSelectManager={setSelectedMgrId}
+              />
+            </div>
+          )}
+
           {/* Left: employee list */}
-          <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
+          {activePage === 'active' && <aside className="w-80 shrink-0 border-r border-np-border bg-white overflow-y-auto">
             <div className="p-4 space-y-2">
               <p className="section-title mb-3">
                 Employees <span className="ml-2 font-bold text-np-text">{filteredByMgr.length}</span>
@@ -182,10 +231,10 @@ export default function App() {
                 ))
               )}
             </div>
-          </aside>
+          </aside>}
 
-          {/* Right: detail */}
-          <main className="flex-1 overflow-y-auto p-6">
+          {/* Right: detail (active tab only) */}
+          {activePage === 'active' && <main className="flex-1 overflow-y-auto p-6">
             {!selectedEmployee ? (
               <SelectPrompt />
             ) : (
@@ -280,7 +329,7 @@ export default function App() {
 
               </div>
             )}
-          </main>
+          </main>}
         </div>
       </div>
     </div>
