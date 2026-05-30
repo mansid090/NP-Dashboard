@@ -7,6 +7,7 @@ import ProbationBadge from './components/ProbationBadge'
 import MonthlyScore from './components/MonthlyScore'
 import WeeklyRemarks from './components/WeeklyRemarks'
 import { SkeletonCard } from './components/LoadingOverlay'
+import ErrorBoundary    from './components/ErrorBoundary'
 
 import { useConfig }          from './hooks/useConfig'
 import { useGoogleSheets }    from './hooks/useGoogleSheets'
@@ -234,6 +235,7 @@ export default function App() {
             {!selectedEmployee ? (
               <SelectPrompt />
             ) : (
+              <ErrorBoundary key={selectedEmpId}>
               <div className="max-w-5xl mx-auto space-y-5 animate-fade-in-up" key={selectedEmpId}>
                 {/* Employee header */}
                 <div className="card">
@@ -324,6 +326,7 @@ export default function App() {
                 </div>
 
               </div>
+              </ErrorBoundary>
             )}
           </main>
           </>}
