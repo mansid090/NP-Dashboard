@@ -30,10 +30,17 @@ export default function ProbationBadge({ employee, compact = false }) {
   if (!joiningDate) {
     return compact
       ? <span className="badge-active"><Clock size={11} /> No date</span>
-      : <p className="text-xs text-np-muted">No joining date set in config sheet.</p>
+      : <p className="text-xs text-amber-600">No joining date set — add it in Column D of the Master Config Sheet.</p>
   }
 
-  const endDate  = getProbationEndDate(joiningDate, probationDays)
+  // Guard against unparseable dates crashing the component
+  let endDate
+  try { endDate = getProbationEndDate(joiningDate, probationDays) }
+  catch {
+    return compact
+      ? <span className="badge-overdue"><AlertTriangle size={11}/> Bad date</span>
+      : <p className="text-xs text-red-600">Invalid joining date "<strong>{joiningDate}</strong>" — use DD/MM/YYYY format in Column D of the Master Config Sheet.</p>
+  }
   const daysLeft = getDaysRemaining(joiningDate, probationDays)
   const progress = getProbationProgress(joiningDate, probationDays)
   const isActive = isProbationActive(joiningDate, probationDays)

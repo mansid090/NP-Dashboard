@@ -33,11 +33,15 @@ function parseDate(raw) {
   const dmy2 = s.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/)
   if (dmy2) return `${dmy2[3]}-${dmy2[2].padStart(2,'0')}-${dmy2[1].padStart(2,'0')}`
 
+  // DD-MM-YY  e.g. 1-1-25 → 2025-01-01
+  const dmy2Short = s.match(/^(\d{1,2})-(\d{1,2})-(\d{2})$/)
+  if (dmy2Short) return `20${dmy2Short[3]}-${dmy2Short[2].padStart(2,'0')}-${dmy2Short[1].padStart(2,'0')}`
+
   // "28 Feb 2026" / "Feb 28 2026"
   const d = new Date(s)
   if (!isNaN(d)) return d.toISOString().slice(0, 10)
 
-  return s
+  return ''  // return empty rather than an unparseable string that crashes the app
 }
 
 function slugId(prefix, str) {
